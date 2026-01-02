@@ -53,16 +53,11 @@ function App() {
   const [fanActive, setFanActive] = useState(false);
   const [controls, setControls] = useState({ auto_mode: false, threshold_humidity: 75, status: false });
 
-  const fetchControls = async () => {
-    const { data } = await supabase.from('device_controls').select('*').eq('device_name', 'led_fan').single();
-    if (data) setControls(data);
-  };
-
-  // Güncelleme fonksiyonu
   const updateDb = async (newValues) => {
     setControls({ ...controls, ...newValues });
     await supabase.from('device_controls').update(newValues).eq('device_name', 'led_fan');
   };
+
   useEffect(() => {
     const getInitialStatus = async () => {
       const { data } = await supabase
@@ -76,46 +71,46 @@ function App() {
   }, []);
 
   useEffect(() => {
-   const fetchInitialData = async () => {
-    const { data } = await supabase
-      .from('measurements')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (data) setMeasurements(data.reverse());
-    setLoading(false);
-  };
+    const fetchInitialData = async () => {
+      const { data } = await supabase
+        .from('measurements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (data) setMeasurements(data.reverse());
+      setLoading(false);
+    };
 
-  fetchInitialData();
+    fetchInitialData();
 
-  // 2. REALTIME ABONELİĞİ (Kritik Kısım)
-  const channel = supabase
-    .channel('db-changes') // Kanal adı rastgele olabilir
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT', // Sadece yeni eklenen verileri dinle
-        schema: 'public',
-        table: 'measurements',
-      },
-      (payload) => {
-        console.log('Yeni veri yakalandı!', payload.new);
-        // Yeni gelen veriyi mevcut listeye ekle
-        setMeasurements((prev) => {
-          const updatedList = [...prev, payload.new];
-          // Liste çok uzamasın diye son 50 tanesini tut
-          return updatedList.slice(-50);
-        });
-      }
-    )
-    .subscribe((status) => {
-      console.log('Realtime bağlantı durumu:', status);
-    });
+    // 2. REALTIME ABONELİĞİ (Kritik Kısım)
+    const channel = supabase
+      .channel('db-changes') // Kanal adı rastgele olabilir
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT', // Sadece yeni eklenen verileri dinle
+          schema: 'public',
+          table: 'measurements',
+        },
+        (payload) => {
+          console.log('Yeni veri yakalandı!', payload.new);
+          // Yeni gelen veriyi mevcut listeye ekle
+          setMeasurements((prev) => {
+            const updatedList = [...prev, payload.new];
+            // Liste çok uzamasın diye son 50 tanesini tut
+            return updatedList.slice(-50);
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime bağlantı durumu:', status);
+      });
 
-  // 3. Cleanup: Sayfa kapandığında aboneliği bitir
-  return () => {
-    supabase.removeChannel(channel);
-  };
+    // 3. Cleanup: Sayfa kapandığında aboneliği bitir
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const current = measurements[measurements.length - 1] || { temperature: 0, humidity: 0 };
@@ -133,7 +128,7 @@ function App() {
       <Group justify="space-between" mb="xl">
         <div>
           <Title order={1} c="green.5" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <IconPlant size={40} /> SERA AKILLI TAKİP SİSTEMİ
+            <img src="greenhouse.png" alt="Greenhouse" style={{ width: '40px', height: '40px' }} /> Sera Akıllı Takip Sistemi
           </Title>
           <Text c="dimmed">IoT Tabanlı Gerçek Zamanlı Bitki Sağlığı Analizi</Text>
         </div>
