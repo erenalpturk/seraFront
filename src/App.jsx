@@ -7,7 +7,7 @@ import {
 } from '@mantine/core';
 import {
   IconTemperature, IconDroplet, IconGauge, IconAlertTriangle,
-  IconPlant, IconWind, IconActivity
+  IconPlant, IconWind, IconActivity, IconClock
 } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts';
 import dayjs from 'dayjs';
@@ -143,6 +143,26 @@ function App() {
       )}
 
       {/* ANA METRİKLER */}
+      <Group justify="flex-end" mb="xs">
+        <Paper
+          py={4}
+          px={12}
+          radius="xl"
+          bg="rgba(255, 255, 255, 0.05)"
+          style={{
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <IconClock size={14} color="#adb5bd" />
+          <Text size="xs" c="dimmed" fw={600}>
+            {current.created_at ? dayjs(current.created_at).format('HH:mm') : '--:--'}
+          </Text>
+        </Paper>
+      </Group>
       <SimpleGrid cols={{ base: 1, md: 3 }} mb="xl">
         <MetricCard label="Sıcaklık" value={current.temperature} unit="°C" color="orange" icon={<IconTemperature size={32} />} />
         <MetricCard label="Nem" value={current.humidity} unit="%" color="blue" icon={<IconDroplet size={32} />} />
