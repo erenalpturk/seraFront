@@ -223,7 +223,10 @@ function App() {
                   />
                 </Group>
                 <Box>
-                  <Text size="sm" mb="xs">Manuel Fan Hızı: %{controls.fan_speed}</Text>
+                  <Group justify="space-between" mb="xs">
+                    <Text size="sm">Manuel Fan Hızı: %{controls.fan_speed}</Text>
+                    <Text size="sm" c="dimmed">Servo Açısı: {Math.round((controls.fan_speed / 100) * 180)}°</Text>
+                  </Group>
                   <Slider
                     value={controls.fan_speed}
                     onChangeEnd={(val) => updateDb({ fan_speed: val })}
@@ -325,14 +328,19 @@ function AutoModeIndicator({ measurements, fanSpeed }) {
 
   const result = computeFanSpeed(last.temperature, last.humidity);
   const labels = getDominantLabel(result.memberships);
+  const servoAngle = Math.round((fanSpeed / 100) * 180);
 
   return (
     <Stack gap="sm" p="xs">
-      <Group justify="space-between" bg="dark.6" p="md" style={{ borderRadius: '8px' }}>
-        <div>
-          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Mevcut Fan Hızı</Text>
+      <Group justify="space-between" bg="dark.6" p="md" style={{ borderRadius: '8px' }} align="center">
+        <Stack gap={2}>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Fan Hızı</Text>
           <Text fw={900} size="2rem" c="green">%{fanSpeed}</Text>
-        </div>
+        </Stack>
+        <Stack gap={2} align="center">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Servo Açısı</Text>
+          <Text fw={900} size="2rem" c="cyan">{servoAngle}°</Text>
+        </Stack>
         <Stack gap={2} align="flex-end">
           <Badge color="orange" variant="light">T: {labels.temperature}</Badge>
           <Badge color="blue" variant="light">RH: {labels.humidity}</Badge>

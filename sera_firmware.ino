@@ -42,6 +42,7 @@ const char* DEVICE_NAME   = "led_fan";  // device_controls tablosundaki kayıt
 const unsigned long SENSOR_READ_INTERVAL   = 5000;   // 5 sn
 const unsigned long CONTROL_FETCH_INTERVAL = 3000;   // 3 sn
 const unsigned long UPLOAD_INTERVAL        = 10000;  // 10 sn
+const unsigned long SERVO_UPDATE_INTERVAL  = 30;     // 30 ms — yumuşak ama hızlı geçiş (0→180° ≈ 0.5 sn)
 
 // =================== HAREKETLİ ORTALAMA ===================
 #define MA_SIZE 5
@@ -64,6 +65,7 @@ bool manualStatus    = false;
 unsigned long lastSensorRead   = 0;
 unsigned long lastControlFetch = 0;
 unsigned long lastUpload       = 0;
+unsigned long lastServoUpdate  = 0;
 
 int currentServoAngle = 0;  // Yumuşak geçiş için son uygulanan açı
 
@@ -103,10 +105,15 @@ void loop() {
     readSensor();
   }
 
-  // Kontrol verisi çekme + servo güncelleme
+  // Kontrol verisi çekme
   if (now - lastControlFetch > CONTROL_FETCH_INTERVAL) {
     lastControlFetch = now;
     fetchControls();
+  }
+
+  // Servo güncelleme (smoothing için kontrol çekmeden bağımsız, sık tetiklenir)
+  if (now - lastServoUpdate > SERVO_UPDATE_INTERVAL) {
+    lastServoUpdate = now;
     applyServoPosition();
   }
 
@@ -220,11 +227,11 @@ void applyServoPosition() {
   targetSpeed = constrain(targetSpeed, 0, 100);
   int targetAngle = map(targetSpeed, 0, 100, 0, 180);
 
-  // Yumuşak geçiş (her seferinde max 5 derece) — servoyu zorlamamak için
+  // Yumuşak geçiş (her seferinde max 10 derece) — 30ms tick ile birlikte ~0.5sn full sweep
   if (targetAngle > currentServoAngle) {
-    currentServoAngle = min(currentServoAngle + 5, targetAngle);
+    currentServoAngle = min(currentServoAngle + 10, targetAngle);
   } else if (targetAngle < currentServoAngle) {
-    currentServoAngle = max(currentServoAngle - 5, targetAngle);
+    currentServoAngle = max(currentServoAngle - 10, targetAngle);
   }
 
   fanServo.write(currentServoAngle);

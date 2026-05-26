@@ -19,6 +19,16 @@ slider ile ayarlamak; bulanık mantık görselleştirme paneli eklemek.
 
 <!-- Yeni değişiklikler buraya, en yeni en üstte olacak şekilde eklenecek. -->
 
+#### `sera_firmware.ino` — Servo geçiş hızı artırıldı (2026-05-26)
+- **Ne yapıldı:** Servo güncellemesi kontrol çekme döngüsünden ayrıldı. Yeni `SERVO_UPDATE_INTERVAL = 30 ms` ve yeni `lastServoUpdate` timer'ı eklendi. Smoothing adım büyüklüğü 5°'den 10°'ye çıkarıldı.
+- **Neden:** Önceki yapıda servo her 3 saniyede bir max 5° hareket ediyordu → 0°→180° tam süpürme **~108 saniye** sürüyordu, bu da kullanıcı slider'ı oynattığında "servo hiç hareket etmiyor" izlenimi veriyordu. Demo/sunum senaryosunda hızlı tepki gerekli.
+- **Nasıl:** `loop()` içinde `fetchControls()` ve `applyServoPosition()` ayrıldı; HTTP request frekansı (3 sn) korundu, servo ise her 30 ms'de bir güncelleniyor. 10°/30ms ile tam süpürme **~0.5 sn**'ye düştü (167°/sn, SG90'ın 600°/sn maksimumunun çok altında, servoyu zorlamıyor). Smoothing korundu — anlık jump yok, animasyon hâlâ akıcı.
+
+#### `src/App.jsx` — Servo açısı gösterimi eklendi (2026-05-26)
+- **Ne yapıldı:** Hem otomatik mod göstergesinde (`AutoModeIndicator`) hem manuel mod slider'ında, fan hızı (%) yanına servo açısı (°) bilgisi eklendi.
+- **Neden:** Kullanıcı, bulanık mantığın ürettiği fan hızının fiziksel olarak servoda kaç dereceye karşılık geldiğini görmek istiyor. ESP32 firmware'i `fan_speed (0-100) → açı (0-180°)` dönüşümü yapıyor; UI'da bu dönüşüm görünür değildi.
+- **Nasıl:** İnline hesaplama `Math.round((fan_speed / 100) * 180)` ile servo açısı türetiliyor (ESP32'deki `map()` ile aynı formül). Otomatik modda 3 sütunlu yerleşim (Fan Hızı | Servo Açısı | Dilsel etiketler); manuel modda slider label'ında "Servo Açısı: X°" sağda dimmed olarak gösteriliyor. Manuel mod yapısı (status switch + slider) korundu.
+
 #### `migrations/001_add_fan_speed.sql` (yeni dosya)
 - **Ne yapıldı:** `device_controls` tablosuna 0-100 aralığında CHECK kısıtı olan `fan_speed INTEGER DEFAULT 0` kolonu ekleyen ve mevcut `led_fan` kaydını 0'a set eden SQL migration'ı oluşturuldu.
 - **Neden:** Mevcut DB'de `fan_speed` kolonu yoktu (sadece boolean `status` vardı). Kademeli fan hızı kontrolü için sayısal bir alana ihtiyaç var.
