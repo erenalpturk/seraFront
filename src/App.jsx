@@ -7,12 +7,15 @@ import {
 } from '@mantine/core';
 import {
   IconTemperature, IconDroplet, IconGauge, IconAlertTriangle,
-  IconPlant, IconWind, IconActivity, IconClock
+  IconPlant, IconWind, IconActivity, IconClock, IconPlugConnectedX
 } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts';
 import dayjs from 'dayjs';
 import { computeFanSpeed, getDominantLabel } from './fuzzyLogic';
 import FuzzyVisualization from './components/FuzzyVisualization';
+
+// ESP32, UPLOAD_INTERVAL = 10sn ile veri gönderir. 3x toleransla 30sn'yi geçerse offline kabul edilir.
+const ESP_OFFLINE_THRESHOLD_MS = 30000;
 
 // --- GELİŞMİŞ HESAPLAMA MOTORU ---
 
@@ -54,10 +57,16 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [controls, setControls] = useState({
     auto_mode: false,
-    threshold_humidity: 75,
     status: false,
     fan_speed: 0, // YENİ: kademeli fan hızı (0-100)
   });
+  const [sliderValue, setSliderValue] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   const updateDb = async (newValues) => {
     setControls({ ...controls, ...newValues });
@@ -68,7 +77,7 @@ function App() {
     const getInitialControls = async () => {
       const { data } = await supabase
         .from('device_controls')
-        .select('auto_mode, status, threshold_humidity, fan_speed')
+        .select('auto_mode, status, fan_speed')
         .eq('device_name', 'led_fan')
         .single();
       if (data) setControls(data);
@@ -119,6 +128,11 @@ function App() {
     };
   }, []);
 
+  // fan_speed dış kaynaktan (DB initial fetch / auto mode write) değişince slider'ı senkronla
+  useEffect(() => {
+    setSliderValue(controls.fan_speed);
+  }, [controls.fan_speed]);
+
   // Bulanık mantık → fan hızı hesabı (sadece otomatik mod açıkken)
   useEffect(() => {
     if (!controls.auto_mode) return;
@@ -138,6 +152,9 @@ function App() {
   }, [measurements, controls.auto_mode]);
 
   const current = measurements[measurements.length - 1] || { temperature: 0, humidity: 0 };
+  const lastMeasurementMs = current.created_at ? new Date(current.created_at).getTime() : null;
+  const isEspOnline = lastMeasurementMs !== null && (now - lastMeasurementMs) < ESP_OFFLINE_THRESHOLD_MS;
+  const offlineForSec = lastMeasurementMs !== null ? Math.floor((now - lastMeasurementMs) / 1000) : null;
   const vpd = GreenhouseEngine.getVPD(current.temperature, current.humidity);
   const ah = GreenhouseEngine.getAbsoluteHumidity(current.temperature, current.humidity);
   const score = GreenhouseEngine.getGrowthScore(current.temperature, current.humidity, vpd);
@@ -156,14 +173,42 @@ function App() {
           </Title>
           <Text c="dimmed">IoT Tabanlı Gerçek Zamanlı Bitki Sağlığı Analizi</Text>
         </div>
-        <Badge size="xl" variant="dot" color="green" p="lg">Sistem Aktif (ESP32 Online)</Badge>
+        <Badge
+          size="xl"
+          variant="dot"
+          color={isEspOnline ? 'green' : 'red'}
+          p="lg"
+        >
+          {isEspOnline ? 'Sistem Aktif (ESP32 Online)' : 'ESP32 Çevrimdışı'}
+        </Badge>
       </Group>
 
+      {/* ESP OFFLINE UYARISI */}
+      {!isEspOnline && (
+        <Alert icon={<IconPlugConnectedX size="1rem" />} title="ESP32 Bağlantısı Yok" color="red" mb="xl">
+          {lastMeasurementMs === null
+            ? 'Henüz hiçbir ölçüm verisi alınmadı. ESP32\'nin çalıştığını ve WiFi\'a bağlandığını kontrol edin.'
+            : `Son ölçümün üzerinden ${offlineForSec} sn geçti (eşik ${ESP_OFFLINE_THRESHOLD_MS / 1000} sn). Gösterilen değerler güncel olmayabilir.`}
+        </Alert>
+      )}
+
       {/* KRİTİK UYARI PANELİ */}
-      {vpd > 1.6 && (
+      {isEspOnline && vpd > 1.6 && (
         <Alert icon={<IconAlertTriangle size="1rem" />} title="Kritik Uyarı!" color="red" mb="xl">
           Hava çok kuru! Bitkiler su kaybediyor, acil nemlendirme önerilir.
         </Alert>
+      )}
+
+      {/* BULANIK MANTIK KONTROL MERKEZİ — HERO */}
+      {measurements.length > 0 && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <FuzzyVisualization
+            temperature={current.temperature}
+            humidity={current.humidity}
+            isOnline={isEspOnline}
+            timestamp={current.created_at}
+          />
+        </div>
       )}
 
       {/* ANA METRİKLER */}
@@ -224,11 +269,12 @@ function App() {
                 </Group>
                 <Box>
                   <Group justify="space-between" mb="xs">
-                    <Text size="sm">Manuel Fan Hızı: %{controls.fan_speed}</Text>
-                    <Text size="sm" c="dimmed">Servo Açısı: {Math.round((controls.fan_speed / 100) * 180)}°</Text>
+                    <Text size="sm">Manuel Fan Hızı: %{sliderValue}</Text>
+                    <Text size="sm" c="dimmed">Servo Açısı: {Math.round((sliderValue / 100) * 180)}°</Text>
                   </Group>
                   <Slider
-                    value={controls.fan_speed}
+                    value={sliderValue}
+                    onChange={setSliderValue}
                     onChangeEnd={(val) => updateDb({ fan_speed: val })}
                     marks={[{ value: 0 }, { value: 50 }, { value: 100 }]}
                     disabled={!controls.status}
@@ -299,16 +345,6 @@ function App() {
           </Paper>
         </Grid.Col>
       </Grid>
-
-      {/* BULANIK MANTIK ANALİZİ */}
-      {measurements.length > 0 && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <FuzzyVisualization
-            temperature={current.temperature}
-            humidity={current.humidity}
-          />
-        </div>
-      )}
 
       {/* ALT BİLGİ */}
       <Paper p="md" withBorder bg="dark.8">

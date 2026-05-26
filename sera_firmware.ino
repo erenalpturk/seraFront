@@ -21,21 +21,23 @@
 #include <ArduinoJson.h>
 #include <DHT.h>
 #include <ESP32Servo.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 // =================== KONFIGÜRASYON ===================
 // !! Bu kısımları kendi bilgilerinle doldur !!
 
-const char* WIFI_SSID     = "Alpren";
-const char* WIFI_PASSWORD = "alperen2";
+const char* WIFI_SSID     = "WIFINAME";
+const char* WIFI_PASSWORD = "wıfıpassword";
 
-const char* SUPABASE_URL  = "https://dhpviwzhehzbcuynfxcv.supabase.co";
-const char* SUPABASE_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRocHZpd3poZWh6YmN1eW5meGN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwODIzOTQsImV4cCI6MjA4MjY1ODM5NH0.Nx6Qd7e2-qbnW7jndiUlS9tnVAGG3w7xD1F5IrZdFWs";  // anon public key
+const char* SUPABASE_URL  = "https://xx.supabase.co";
+const char* SUPABASE_KEY  = "xxxx";  // anon public key
 
 const char* DEVICE_NAME   = "led_fan";  // device_controls tablosundaki kayıt
 
 // =================== PIN TANIMLARI ===================
 #define DHT_PIN    4
-#define DHT_TYPE    DHT22
+#define DHT_TYPE    DHT11
 #define SERVO_PIN   18
 
 // =================== ZAMANLAMA (ms) ===================
@@ -71,6 +73,7 @@ int currentServoAngle = 0;  // Yumuşak geçiş için son uygulanan açı
 
 // =================== SETUP ===================
 void setup() {
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   Serial.begin(115200);
   delay(500);
   Serial.println("\n=== Sera 2.0 ESP32 Başlatılıyor ===");
