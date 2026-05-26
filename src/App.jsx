@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { Switch, Slider, Collapse, Box } from '@mantine/core'; // Yeni bileşenler
 import {
@@ -11,6 +11,8 @@ import {
 } from '@tabler/icons-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts';
 import dayjs from 'dayjs';
+import { computeFanSpeed, getDominantLabel } from './fuzzyLogic';
+import FuzzyVisualization from './components/FuzzyVisualization';
 
 // --- GELİŞMİŞ HESAPLAMA MOTORU ---
 
@@ -50,8 +52,12 @@ const GreenhouseEngine = {
 function App() {
   const [measurements, setMeasurements] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fanActive, setFanActive] = useState(false);
-  const [controls, setControls] = useState({ auto_mode: false, threshold_humidity: 75, status: false });
+  const [controls, setControls] = useState({
+    auto_mode: false,
+    threshold_humidity: 75,
+    status: false,
+    fan_speed: 0, // YENİ: kademeli fan hızı (0-100)
+  });
 
   const updateDb = async (newValues) => {
     setControls({ ...controls, ...newValues });
@@ -59,15 +65,15 @@ function App() {
   };
 
   useEffect(() => {
-    const getInitialStatus = async () => {
+    const getInitialControls = async () => {
       const { data } = await supabase
         .from('device_controls')
-        .select('status')
+        .select('auto_mode, status, threshold_humidity, fan_speed')
         .eq('device_name', 'led_fan')
         .single();
-      if (data) setFanActive(data.status);
+      if (data) setControls(data);
     };
-    getInitialStatus();
+    getInitialControls();
   }, []);
 
   useEffect(() => {
@@ -113,6 +119,24 @@ function App() {
     };
   }, []);
 
+  // Bulanık mantık → fan hızı hesabı (sadece otomatik mod açıkken)
+  useEffect(() => {
+    if (!controls.auto_mode) return;
+    if (!measurements.length) return;
+
+    const last = measurements[measurements.length - 1];
+    if (!last || last.temperature == null || last.humidity == null) return;
+
+    const result = computeFanSpeed(last.temperature, last.humidity);
+
+    // Eğer hesaplanan değer mevcut fan_speed'den farklıysa güncelle
+    // (2 birim threshold ile gereksiz Supabase yazımlarını azaltıyoruz)
+    if (Math.abs(result.fanSpeed - controls.fan_speed) >= 2) {
+      updateDb({ fan_speed: result.fanSpeed });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [measurements, controls.auto_mode]);
+
   const current = measurements[measurements.length - 1] || { temperature: 0, humidity: 0 };
   const vpd = GreenhouseEngine.getVPD(current.temperature, current.humidity);
   const ah = GreenhouseEngine.getAbsoluteHumidity(current.temperature, current.humidity);
@@ -132,7 +156,7 @@ function App() {
           </Title>
           <Text c="dimmed">IoT Tabanlı Gerçek Zamanlı Bitki Sağlığı Analizi</Text>
         </div>
-        <Badge size="xl" variant="dot" color="green" p="lg">Sistem Aktif (ESP12-E Online)</Badge>
+        <Badge size="xl" variant="dot" color="green" p="lg">Sistem Aktif (ESP32 Online)</Badge>
       </Group>
 
       {/* KRİTİK UYARI PANELİ */}
@@ -174,10 +198,11 @@ function App() {
               <IconPlant color="green" />
             </Group>
 
+            {/* Otomatik Mod Toggle */}
             <Group justify="space-between" bg="dark.6" p="md" style={{ borderRadius: '8px' }}>
               <div>
-                <Text fw={600}>Otomatik Mod</Text>
-                <Text size="xs" c="dimmed">Sistem verilere göre karar verir.</Text>
+                <Text fw={600}>Otomatik Mod (Bulanık Mantık)</Text>
+                <Text size="xs" c="dimmed">Fan hızı T ve RH'ye göre fuzzy logic ile belirlenir.</Text>
               </div>
               <Switch
                 checked={controls.auto_mode}
@@ -186,32 +211,36 @@ function App() {
               />
             </Group>
 
-            {/* Manuel Kontrol (Sadece Otomatik Mod Kapalıyken Aktif) */}
+            {/* Manuel Mod: 0-100 slider + on/off switch */}
             <Collapse in={!controls.auto_mode}>
-              <Group justify="space-between" p="xs">
-                <Text size="sm">Manuel Fan Kontrolü</Text>
-                <Switch
-                  checked={controls.status}
-                  onChange={(e) => updateDb({ status: e.currentTarget.checked })}
-                  color="orange"
-                />
-              </Group>
+              <Stack p="xs" gap="sm">
+                <Group justify="space-between">
+                  <Text size="sm">Manuel Fan Durumu</Text>
+                  <Switch
+                    checked={controls.status}
+                    onChange={(e) => updateDb({ status: e.currentTarget.checked })}
+                    color="orange"
+                  />
+                </Group>
+                <Box>
+                  <Text size="sm" mb="xs">Manuel Fan Hızı: %{controls.fan_speed}</Text>
+                  <Slider
+                    value={controls.fan_speed}
+                    onChangeEnd={(val) => updateDb({ fan_speed: val })}
+                    marks={[{ value: 0 }, { value: 50 }, { value: 100 }]}
+                    disabled={!controls.status}
+                    color="orange"
+                  />
+                </Box>
+              </Stack>
             </Collapse>
 
-            {/* Eşik Ayarı (Sadece Otomatik Mod Açıkken Anlamlı) */}
+            {/* Otomatik Mod: Mevcut fan hızı + dilsel etiket göstergesi */}
             <Collapse in={controls.auto_mode}>
-              <Box p="xs">
-                <Text size="sm" mb="xs">Nem Eşik Değeri: %{controls.threshold_humidity}</Text>
-                <Slider
-                  value={controls.threshold_humidity}
-                  onChangeEnd={(val) => updateDb({ threshold_humidity: val })}
-                  marks={[{ value: 40 }, { value: 60 }, { value: 80 }]}
-                  label={(val) => `%${val}`}
-                />
-                <Text size="xs" c="dimmed" mt="sm">
-                  Nem bu değerin üzerine çıkarsa fan otomatik olarak çalışacaktır.
-                </Text>
-              </Box>
+              <AutoModeIndicator
+                measurements={measurements}
+                fanSpeed={controls.fan_speed}
+              />
             </Collapse>
           </Stack>
         </Paper>
@@ -268,14 +297,52 @@ function App() {
         </Grid.Col>
       </Grid>
 
+      {/* BULANIK MANTIK ANALİZİ */}
+      {measurements.length > 0 && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <FuzzyVisualization
+            temperature={current.temperature}
+            humidity={current.humidity}
+          />
+        </div>
+      )}
+
       {/* ALT BİLGİ */}
       <Paper p="md" withBorder bg="dark.8">
         <Group justify="space-between">
-          <Text size="sm" c="dimmed">Proje: Akıllı Sera İzleme v2.0</Text>
+          <Text size="sm" c="dimmed">Proje: Sera 2.0 — Bulanık Mantık Tabanlı Kontrol</Text>
           <Text size="sm" c="dimmed">Son Veri: {dayjs(current.created_at).format('HH:mm:ss')}</Text>
         </Group>
       </Paper>
     </Container>
+  );
+}
+
+function AutoModeIndicator({ measurements, fanSpeed }) {
+  if (!measurements.length) return null;
+  const last = measurements[measurements.length - 1];
+  if (!last || last.temperature == null) return null;
+
+  const result = computeFanSpeed(last.temperature, last.humidity);
+  const labels = getDominantLabel(result.memberships);
+
+  return (
+    <Stack gap="sm" p="xs">
+      <Group justify="space-between" bg="dark.6" p="md" style={{ borderRadius: '8px' }}>
+        <div>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Mevcut Fan Hızı</Text>
+          <Text fw={900} size="2rem" c="green">%{fanSpeed}</Text>
+        </div>
+        <Stack gap={2} align="flex-end">
+          <Badge color="orange" variant="light">T: {labels.temperature}</Badge>
+          <Badge color="blue" variant="light">RH: {labels.humidity}</Badge>
+        </Stack>
+      </Group>
+      <Progress value={fanSpeed} color="green" size="lg" radius="md" />
+      <Text size="xs" c="dimmed" ta="center">
+        Aktif kural sayısı: {result.activeRules.length} / 9
+      </Text>
+    </Stack>
   );
 }
 

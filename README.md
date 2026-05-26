@@ -1,16 +1,37 @@
-# React + Vite
+# Sera 2.0 — Bulanık Mantık Tabanlı Akıllı Sera Sistemi
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+IoT tabanlı, gerçek zamanlı sera takip ve kontrol dashboard'u. ESP32 üzerinden DHT22 sensör verisi alır, bulanık mantık ile fan hızını otomatik hesaplar, SG90 servo motor ile aktuasyonu temsil eder.
 
-Currently, two official plugins are available:
+## Teknolojiler
+- **Frontend:** React 19 + Vite + Mantine v8 + Recharts
+- **Backend:** Supabase (PostgreSQL + Realtime + REST API)
+- **Donanım:** ESP32 DevKit V1 + DHT22 + SG90
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Kurulum
 
-## React Compiler
+```bash
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Ortam Değişkenleri
 
-## Expanding the ESLint configuration
+`.env.local` dosyası oluştur:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```
+VITE_SUPABASE_URL=https://xxxxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGc...
+```
+
+## Veritabanı
+
+İlk kez kuruyorsan `migrations/001_add_fan_speed.sql` dosyasını Supabase SQL Editor'da çalıştır.
+
+## Bulanık Mantık Mimarisi
+
+- **Giriş:** Sıcaklık (Soğuk/İdeal/Sıcak), Nem (Kuru/İdeal/Nemli)
+- **Çıkış:** Fan hızı (0-100)
+- **Kural sayısı:** 9 (Mamdani)
+- **Defuzzifikasyon:** Ağırlıklı ortalama
+
+Detaylar: `src/fuzzyLogic.js`
