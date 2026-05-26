@@ -217,12 +217,6 @@ Hero panel başlığındaki rozet:
 
 ---
 
-## 📝 Değişiklik Kaydı
-
-Tüm değişiklikler tarih, dosya, ne/neden/nasıl detayıyla [`DEGISIKLIKLER.md`](DEGISIKLIKLER.md) içinde tutulur.
-
----
-
 ## 📜 Lisans
 
 Eğitim amaçlı proje. İhtiyaca göre kullanılabilir.
